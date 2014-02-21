@@ -1,18 +1,24 @@
 #coding:utf-8
 import sys
-sys.path.append("lib")
-import thrift.protocol.TBinaryProtocol as TBinaryProtocol
-import thrift.transport.THttpClient as THttpClient
-import evernote.edam.userstore.UserStore as UserStore
+import os
+sys.path.insert(0, os.path.dirname(__file__))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'lib'))
+import urllib
+import urllib.parse as urlparse
+
+
+# from evernote.edam.error.ttypes import EDAMUserException
 import evernote.edam.notestore.NoteStore as NoteStore
 import evernote.edam.type.ttypes as Types
-import evernote.edam.error.ttypes as Errors
-from html import XHTML
-import sublime,sublime_plugin
-import oauth2 as oauth
-import urllib
-import urlparse
+import evernote.edam.userstore.UserStore as UserStore
 import markdown2
+import oauth2 as oauth
+import sublime
+import sublime_plugin
+import thrift.protocol.TBinaryProtocol as TBinaryProtocol
+import thrift.transport.THttpClient as THttpClient
+# from html import XHTML
+
 
 consumer_key = 'oparrish-4096'
 consumer_secret ='c112c6417738f06a'
@@ -48,7 +54,7 @@ class SendToEvernoteCommand(sublime_plugin.TextCommand):
         def _connect(authToken):
             try:
                 callback(**kwargs)
-            except Exception,e:
+            except Exception as e:
                 sublime.error_message("error:%s"%e)  
 
         def on_verifier(verifier):
@@ -58,6 +64,9 @@ class SendToEvernoteCommand(sublime_plugin.TextCommand):
                             
                 client = oauth.Client(consumer, token)
                 resp, content = client.request(token_request_uri, "POST")
+                if isinstance(content, bytes):
+                    content = bytes.decode(content)
+                print(content)
                 
                 access_token = dict(urlparse.parse_qsl(content))
                 
@@ -88,12 +97,12 @@ class SendToEvernoteCommand(sublime_plugin.TextCommand):
                 urllib.quote(callback_url))
 
             resp, content = client.request(request_url, "GET")
-            print content
+            if isinstance(content, bytes):
+                content = bytes.decode(content)
+
             if resp['status'] != '200':
                 raise Exception("Invalid response %s." % resp['status'])
-
-            request_token = dict(urlparse.parse_qsl(content))
-
+            request_token = dict(urlparse.parse_qsl(str(content)))
             authorization_url = '%s?oauth_token=%s' % (resource_owner_authorization_uri, request_token['oauth_token'])
 
             def on_authorization_url(authorization_url):
@@ -110,13 +119,13 @@ class SendToEvernoteCommand(sublime_plugin.TextCommand):
         noteStoreHttpClient = THttpClient.THttpClient(noteStoreUrl)
         noteStoreProtocol = TBinaryProtocol.TBinaryProtocol(noteStoreHttpClient)
         noteStore = NoteStore.Client(noteStoreProtocol)        
-        region = sublime.Region(0L, self.view.size())
+        region = sublime.Region(0, self.view.size())
         content = self.view.substr(region)  
 
         markdown_html = self.to_markdown_html()
 
         def sendnote(title,tags):
-            xh =  XHTML()
+            # xh =  XHTML()
             note = Types.Note()
             note.title = title.encode('utf-8')
             note.content = '<?xml version="1.0" encoding="UTF-8"?>'
@@ -129,14 +138,14 @@ class SendToEvernoteCommand(sublime_plugin.TextCommand):
                 cnote = noteStore.createNote(authToken, note)   
                 sublime.status_message("send success guid:%s"%cnote.guid)  
                 sublime.message_dialog("success") 
-            except Errors.EDAMUserException,e:
+            except Exception as e:
                 args = dict(title=title,tags=tags)
                 if e.errorCode == 9:
                     self.connect(self.send_note,**args)
                 else:
                     if sublime.ok_cancel_dialog('error %s! retry?'%e):
                         self.connect(self.send_note,**args)
-            except  Exception,e:
+            except  Exception as e:
                 sublime.error_message('error %s'%e)
 
         def on_title(title):

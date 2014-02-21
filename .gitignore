@@ -165,3 +165,8 @@ sftp-config.json
 sftp-config-alt.json
 logs
 sessions
+
+
+## sublime
+*.sublime-project
+*.sublime-workspace

@@ -61,6 +61,8 @@ see <https://github.com/trentm/python-markdown2/wiki/Extras> for details):
   some limitations.
 * metadata: Extract metadata from a leading '---'-fenced block.
   See <https://github.com/trentm/python-markdown2/issues/77> for details.
+* nofollow: Add `rel="nofollow"` to add `<a>` tags with an href. See
+  <http://en.wikipedia.org/wiki/Nofollow>.
 * pyshell: Treats unindented Python interactive shell sessions as <code>
   blocks.
 * link-patterns: Auto-link given regex patterns in text (e.g. bug number
@@ -80,7 +82,7 @@ see <https://github.com/trentm/python-markdown2/wiki/Extras> for details):
 #   not yet sure if there implications with this. Compare 'pydoc sre'
 #   and 'perldoc perlre'.
 
-__version_info__ = (2, 0, 2)
+__version_info__ = (2, 2, 0)
 __version__ = '.'.join(map(str, __version_info__))
 __author__ = "Trent Mick"
 
@@ -248,6 +250,10 @@ class Markdown(object):
         if "metadata" in self.extras:
             self.metadata = {}
 
+    # Per <https://developer.mozilla.org/en-US/docs/HTML/Element/a> "rel"
+    # should only be used in <a> tags with an "href" attribute.
+    _a_nofollow = re.compile(r"<(a)([^>]*href=)", re.IGNORECASE)
+
     def convert(self, text):
         """Convert the given text."""
         # Main function. The order in which other subs are called here is
@@ -308,6 +314,9 @@ class Markdown(object):
         # Turn block-level HTML blocks into hash entries
         text = self._hash_html_blocks(text, raw=True)
 
+        if "fenced-code-blocks" in self.extras:
+            text = self._do_fenced_code_blocks(text)
+
         # Strip link definitions, store in hashes.
         if "footnotes" in self.extras:
             # Must do footnotes first because an unlucky footnote defn
@@ -327,6 +336,9 @@ class Markdown(object):
 
         if self.safe_mode:
             text = self._unhash_html_spans(text)
+
+        if "nofollow" in self.extras:
+            text = self._a_nofollow.sub(r'<\1 rel="nofollow"\2', text)
 
         text += "\n"
 
@@ -901,7 +913,10 @@ class Markdown(object):
             text = self._do_smart_punctuation(text)
 
         # Do hard breaks:
-        text = re.sub(r" {2,}\n", " <br%s\n" % self.empty_element_suffix, text)
+        if "break-on-newline" in self.extras:
+            text = re.sub(r" *\n", "<br%s\n" % self.empty_element_suffix, text)
+        else:
+            text = re.sub(r" {2,}\n", " <br%s\n" % self.empty_element_suffix, text)
 
         return text
 
@@ -991,14 +1006,18 @@ class Markdown(object):
             raise MarkdownError("invalid value for 'safe_mode': %r (must be "
                                 "'escape' or 'replace')" % self.safe_mode)
 
+    """
+    The expression [^ \t'"]* is used instead of .* because of special cases
+    for links. Specifically: inline links, quotes in links, and odd anchors.
+    """
     _tail_of_inline_link_re = re.compile(r'''
           # Match tail of: [text](/url/) or [text](/url/ "title")
           \(            # literal paren
             [ \t]*
             (?P<url>            # \1
-                <.*?>
+                <[^ \t'"]*>
                 |
-                .*?
+                [^ \t'"]*
             )
             [ \t]*
             (                   # \2
@@ -1121,10 +1140,11 @@ class Markdown(object):
                     else:
                         title_str = ''
                     if is_img:
-                        result = '<img src="%s" alt="%s"%s%s' \
+                        img_class_str = self._html_class_str_from_tag("img")
+                        result = '<img src="%s" alt="%s"%s%s%s' \
                             % (url.replace('"', '&quot;'),
                                _xml_escape_attr(link_text),
-                               title_str, self.empty_element_suffix)
+                               title_str, img_class_str, self.empty_element_suffix)
                         if "smarty-pants" in self.extras:
                             result = result.replace('"', self._escape_table['"'])
                         curr_pos = start_idx + len(result)
@@ -1171,10 +1191,11 @@ class Markdown(object):
                         else:
                             title_str = ''
                         if is_img:
-                            result = '<img src="%s" alt="%s"%s%s' \
+                            img_class_str = self._html_class_str_from_tag("img")
+                            result = '<img src="%s" alt="%s"%s%s%s' \
                                 % (url.replace('"', '&quot;'),
                                    link_text.replace('"', '&quot;'),
-                                   title_str, self.empty_element_suffix)
+                                   title_str, img_class_str, self.empty_element_suffix)
                             if "smarty-pants" in self.extras:
                                 result = result.replace('"', self._escape_table['"'])
                             curr_pos = start_idx + len(result)
@@ -1934,12 +1955,8 @@ def _slugify(value):
 
     From Django's "django/template/defaultfilters.py".
     """
-    try:
-        import unicodedata
-        value = unicodedata.normalize('NFKD', value)
-    except ImportError:
-        pass
-    value = value.encode('ascii', 'ignore').decode()
+    import unicodedata
+    value = unicodedata.normalize('NFKD', value).encode('ascii', 'ignore').decode()
     value = _slugify_strip_re.sub('', value).strip().lower()
     return _slugify_hyphenate_re.sub('-', value)
 ## end of http://code.activestate.com/recipes/577257/ }}}

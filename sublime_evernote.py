@@ -10,7 +10,10 @@ sys.path.insert(0, os.path.dirname(__file__))
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'lib'))
 # from html import XHTML
 
+from evernote.api.client import EvernoteClient
+from evernote.edam.type.ttypes import Note
 
+from io import StringIO
 
 
 consumer_key = 'oparrish-4096'
@@ -43,11 +46,42 @@ class SendToEvernoteCommand(sublime_plugin.TextCommand):
 
 
     def send_note(self,**kwargs):
-        
         dev_token = self.settings.get('dev_token')
         if not dev_token:
-            sublime.message_dialog('dev_token is not setting. please go to https://www.evernote.com/api/DeveloperToken.action ')
+            sublime.error_message('dev_token is not setting, please go to "https://www.evernote.com/api/DeveloperToken.action" get a dev token.')
             return
+        ec = EvernoteClient(token=dev_token)
+        userstore = ec.get_user_store()
+        user = userstore.getUser()
+        sublime.status_message('Connected Evernote user: %s' % user.username)
+        notestore = ec.get_note_store()
+        notebooks = notestore.listNotebooks()
+        notenames = []
+        for notebook in notebooks:
+            notenames.append(notebook.name)
+
+        def on_select(index):
+            notebook = notebooks[index]
+            note = Note()
+            note.title = self.view.name() if self.view.name() and len(self.view.name()) else os.path.split(self.view.file_name())[1]
+            note.notebookGuid = notebook.guid
+            note.content = '<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE en-note SYSTEM "http://xml.evernote.com/pub/enml2.dtd">'
+            content = StringIO(self.view.substr(sublime.Region(0, self.view.size())))
+            note.content += '<en-note><pre>'
+            while True:
+                line = content.readline()
+                if not line:
+                    break
+                note.content += line
+
+
+            note.content += '</pre></en-note>'
+            guid = notestore.createNote(note)
+            print(guid)
+
+        self.window.show_quick_panel(notenames, on_select)
+
+
 
     def run(self, edit):
         self.send_note()

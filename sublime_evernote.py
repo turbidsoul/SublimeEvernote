@@ -1,19 +1,21 @@
 #coding:utf-8
 import os
 import sys
-
-# import markdown2
-import sublime
-import sublime_plugin
-
 sys.path.insert(0, os.path.dirname(__file__))
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'lib'))
-# from html import XHTML
 
+import markdown2
+import sublime
+import sublime_plugin
 from evernote.api.client import EvernoteClient
 from evernote.edam.type.ttypes import Note
-
 from io import StringIO
+
+# import markdown2
+
+# from html import XHTML
+
+
 
 
 consumer_key = 'oparrish-4096'
@@ -31,18 +33,16 @@ class SendToEvernoteCommand(sublime_plugin.TextCommand):
         self.window = sublime.active_window()
         self.settings = sublime.load_settings('SublimeEvernote.sublime-settings')
 
-    # def to_markdown_html(self):
-    #     region = sublime.Region(0, self.view.size())
-    #     encoding = self.view.encoding()
-    #     if encoding == 'Undefined':
-    #         encoding = 'utf-8'
-    #     elif encoding == 'Western (Windows 1252)':
-    #         encoding = 'windows-1252'
-    #     contents = self.view.substr(region)
-
-    #     markdown_html = markdown2.markdown(contents, extras=['footnotes', 'fenced-code-blocks', 'cuddled-lists', 'code-friendly', 'metadata'])
-
-    #     return markdown_html
+    def to_markdown_html(self):
+        region = sublime.Region(0, self.view.size())
+        encoding = self.view.encoding()
+        if encoding == 'Undefined':
+            encoding = 'utf-8'
+        elif encoding == 'Western (Windows 1252)':
+            encoding = 'windows-1252'
+        contents = self.view.substr(region)
+        markdown_html = markdown2.markdown(contents, extras=['footnotes', 'fenced-code-blocks', 'cuddled-lists', 'code-friendly', 'pyshell'])
+        return markdown_html
 
 
     def send_note(self,**kwargs):
@@ -66,22 +66,25 @@ class SendToEvernoteCommand(sublime_plugin.TextCommand):
             note.title = self.view.name() if self.view.name() and len(self.view.name()) else os.path.split(self.view.file_name())[1]
             note.notebookGuid = notebook.guid
             note.content = '<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE en-note SYSTEM "http://xml.evernote.com/pub/enml2.dtd">'
-            content = StringIO(self.view.substr(sublime.Region(0, self.view.size())))
-            note.content += '<en-note><pre>'
-            while True:
-                line = content.readline()
-                if not line:
-                    break
-                note.content += line
+            note.content += '<en-note>'
 
+            _, ext = os.path.splitext(self.view.file_name())
 
-            note.content += '</pre></en-note>'
-            guid = notestore.createNote(note)
-            print(guid)
+            if ext in ['.md', '.markdown', '.mdown']:
+                note.content += self.to_markdown_html()
+            else:
+                note.content += '<pre>'
+                content = StringIO(self.view.substr(sublime.Region(0, self.view.size())))
+                while True:
+                    line = content.readline()
+                    if not line:
+                        break
+                    note.content += line
+                note.content += '</pre>'
+            note.content += '</en-note>'
+            notestore.createNote(note)
 
         self.window.show_quick_panel(notenames, on_select)
-
-
 
     def run(self, edit):
         self.send_note()

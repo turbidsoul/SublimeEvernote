@@ -2,23 +2,16 @@
 # -*- coding: utf-8 -*-
 # @Author: Turbidsoul Chen
 # @Date:   2013-11-19 14:47:00
-# @Last Modified by:   Turbidsoul Chen
-# @Last Modified time: 2014-03-15 12:26:43
+# @Last Modified 2014-03-31
 
+from evernote.api.client import EvernoteClient
 
-import signal
+dev_token = "S=s1:U=8d8b3:E=14baa1366de:C=14452623ae1:P=1cd:A=en-devtoken:V=2:H=4cf650744f76de023dc43d4b124d3e75"
 
-def empty(name):
-    while True:
-        print("<empty process> " + name)
-        yield None
-
-def termination(name, maxn):
-    for i in xrange(maxn):
-        print("Hear %s, %d out of %d" % (name, i, maxn))
-        yield None
-
-
-def delay(duration=.8):
-    pass
-
+ec = EvernoteClient(token=dev_token)
+user = ec.get_user_store().getUser()
+print(user.username)
+note_store = ec.get_note_store()
+notebooks = note_store.listNotebooks()
+for notebook in notebooks:
+    print(notebook.name)

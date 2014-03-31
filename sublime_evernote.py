@@ -41,7 +41,7 @@ class EvernoteThread(threading.Thread):
         if self.action == 'load_notebooks':
             self.load_notebooks()
         elif self.action == 'send_note':
-            pass
+            self.send_note()
 
     def load_notebooks(self):
         ec = EvernoteClient(token=self.token)
@@ -55,7 +55,8 @@ class EvernoteThread(threading.Thread):
 
         cmd = self.cmd
         def on_select(index):
-            print(index)
+            if index < 0:
+                return
             notebook = notebooks[index]
             et = EvernoteThread('send_note', self.token, self.cmd, notebook=notebook)
             et.start()

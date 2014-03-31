@@ -30,11 +30,12 @@ token_request_uri = "https://" + evernoteHost + "/oauth"
 
 class EvernoteThread(threading.Thread):
     """docstring for EvernoteThread"""
-    def __init__(self, action, token, cmd):
+    def __init__(self, action, token, cmd, notebook=None):
         super(EvernoteThread, self).__init__()
         self.action = action
         self.token = token
         self.cmd = cmd
+        self.notebook = notebook
 
     def run(self):
         if self.action == 'load_notebooks':
@@ -54,41 +55,68 @@ class EvernoteThread(threading.Thread):
 
         cmd = self.cmd
         def on_select(index):
+            print(index)
             notebook = notebooks[index]
-            note = Note()
-            note.title = cmd.view.name() if cmd.view.name() and len(cmd.view.name()) else os.path.split(cmd.view.file_name())[1]
-            note.notebookGuid = notebook.guid
-            note.content = '<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE en-note SYSTEM "http://xml.evernote.com/pub/enml2.dtd">'
-            note.content += '<en-note>'
-
-            _, ext = os.path.splitext(cmd.view.file_name())
-
-            if ext in ['.md', '.markdown', '.mdown']:
-                note.content += cmd.to_markdown_html()
-            else:
-                note.content += '<pre>'
-                content = StringIO(cmd.view.substr(sublime.Region(0, cmd.view.size())))
-                while True:
-                    line = content.readline()
-                    if not line:
-                        break
-                    note.content += line
-                note.content += '</pre>'
-            note.content += '</en-note>'
-            notestore.createNote(note)
+            et = EvernoteThread('send_note', self.token, self.cmd, notebook=notebook)
+            et.start()
+            ProcessThread(et, "Sending to evernote", "Send to evernote success")
 
         cmd.window.show_quick_panel(notenames, on_select)
 
+    def send_note(self):
+        cmd = self.cmd
+        ec = EvernoteClient(token=self.token)
+        notestore = ec.get_note_store()
+        notebook = self.notebook
+        note = Note()
+        note.title = cmd.view.name() if cmd.view.name() and len(cmd.view.name()) else os.path.split(cmd.view.file_name())[1]
+        note.notebookGuid = notebook.guid
+        note.content = '<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE en-note SYSTEM "http://xml.evernote.com/pub/enml2.dtd">'
+        note.content += '<en-note>'
 
-class ProcessThread(threading):
+        _, ext = os.path.splitext(cmd.view.file_name())
+
+        if ext in ['.md', '.markdown', '.mdown']:
+            note.content += cmd.to_markdown_html()
+        else:
+            note.content += '<pre>'
+            content = StringIO(cmd.view.substr(sublime.Region(0, cmd.view.size())))
+            while True:
+                line = content.readline()
+                if not line:
+                    break
+                note.content += line
+            note.content += '</pre>'
+        note.content += '</en-note>'
+        notestore.createNote(note)
+
+
+class ProcessThread(threading.Thread):
     """docstring for ProcessThread"""
-    def __init__(self, thread):
+    def __init__(self, thread, message, success_message):
         super(ProcessThread, self).__init__()
         self.thread = thread
+        self.message = message
+        self.successs_message = success_message
+        self.size = 8
+        self.addend = 1
+        sublime.set_timeout(lambda: self.run(0), 100)
 
-    def run(self):
+    def run(self, i):
         if not self.thread.is_alive():
-            pass
+            sublime.status_message(self.successs_message)
+            return
+        before = i % self.size
+        after = self.size - 1 - before
+        sublime.status_message("%s [%s=%s]" % (self.message, ' ' * before, ' ' * after))
+
+        if not after:
+            self.addend = -1
+        if not before:
+            self.addend = 1
+        i += self.addend
+        sublime.set_timeout(lambda: self.run(i), 100)
+
 
 
 
@@ -117,6 +145,7 @@ class SendToEvernoteCommand(sublime_plugin.TextCommand):
             return
         et = EvernoteThread('load_notebooks', dev_token, self)
         et.start()
+        ProcessThread(et, 'Load Evernote Notebooks', 'Load evernote noteboosk success!')
 
     def run(self, edit):
         self.send_note()

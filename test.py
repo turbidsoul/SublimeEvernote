@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 # @Author: Turbidsoul Chen
 # @Date:   2013-11-19 14:47:00
-# @Last Modified 2014-03-31
+# @Last Modified 2014-04-29
 
 from evernote.api.client import EvernoteClient
 
@@ -15,3 +15,4 @@ note_store = ec.get_note_store()
 notebooks = note_store.listNotebooks()
 for notebook in notebooks:
     print(notebook.name)
+
